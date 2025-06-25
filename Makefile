@@ -1,0 +1,4 @@
+
+dev:
+	python main.py
+

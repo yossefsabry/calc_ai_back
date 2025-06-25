@@ -1,6 +1,5 @@
 # import torch
 # from transformers import pipeline, BitsAndBytesConfig, AutoProcessor, LlavaForConditionalGeneration
-# from PIL import Image
 
 # # quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
 # quantization_config = BitsAndBytesConfig(
@@ -26,15 +25,20 @@
 #     for text in generated_text:
 #         print(text.split("ASSISTANT:")[-1])
 
+from PIL import Image
 import google.generativeai as genai
 import ast
 import json
-from PIL import Image
 from constants import GEMINI_API_KEY
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-def analyze_image(img: Image, dict_of_vars: dict):
+def analyze_image(img: Image.Image, dict_of_vars: dict):
+
+    print("foooooooooooooooooooo")
+    print("api key: ", GEMINI_API_KEY)
+    print("foooooooooooooooooooo")
+
     model = genai.GenerativeModel(model_name="gemini-1.5-flash")
     dict_of_vars_str = json.dumps(dict_of_vars, ensure_ascii=False)
     prompt = (
@@ -58,6 +62,7 @@ def analyze_image(img: Image, dict_of_vars: dict):
         f"DO NOT USE BACKTICKS OR MARKDOWN FORMATTING. "
         f"PROPERLY QUOTE THE KEYS AND VALUES IN THE DICTIONARY FOR EASIER PARSING WITH Python's ast.literal_eval."
     )
+
     response = model.generate_content([prompt, img])
     print(response.text)
     answers = []
