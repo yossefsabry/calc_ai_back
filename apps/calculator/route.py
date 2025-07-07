@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 import base64
 from io import BytesIO
 from apps.calculator.utils import analyze_image
 from schema import ImageData
 from PIL import Image
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 import json
+import os
 
 router = APIRouter()
 
@@ -14,8 +15,9 @@ router = APIRouter()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@router.post('')
-async def process_image(data: ImageData) -> Dict[str, Any]:
+@router.post("")
+async def process_image(data: ImageData, request: Request) -> Dict[str, Any]:
+    logger.info(f"Received request from {request.client.host}")
     """
     Process an image containing mathematical expressions and return calculated results.
     
@@ -70,6 +72,10 @@ async def process_image(data: ImageData) -> Dict[str, Any]:
             # If it's actually async (uncomment if needed):
             # responses = await analyze_image(image, dict_of_vars=data.dict_of_vars)
             
+            if isinstance(responses, dict) and 'error' in responses:
+                logger.error(f"Image analysis error: {responses['error']}")
+                raise HTTPException(status_code=500, detail=responses['error'])
+            
             if not responses:
                 logger.warning("Empty response from image analysis")
                 responses = []
@@ -85,7 +91,7 @@ async def process_image(data: ImageData) -> Dict[str, Any]:
                     except json.JSONDecodeError:
                         processed_data.append({"raw": str(item)})
 
-            logger.info("Image processed successfully")
+            logger.info(f"Processed response: {processed_data}")
             return {
                 "message": "Success",
                 "data": processed_data,
@@ -107,3 +113,7 @@ async def process_image(data: ImageData) -> Dict[str, Any]:
             status_code=500,
             detail="Internal server error"
         ) from e
+
+@router.get("/health")
+async def health_check():
+    return {"status": "ok"}

@@ -30,15 +30,22 @@ import google.generativeai as genai
 import ast
 import json
 from constants import GEMINI_API_KEY
+import logging
+import concurrent.futures
+import os
+import threading
 
-genai.configure(api_key=GEMINI_API_KEY)
+logger = logging.getLogger(__name__)
 
-def analyze_image(img: Image.Image, dict_of_vars: dict):
+genai.configure(api_key=os.getenv('GEMINI_API_KEY', GEMINI_API_KEY))
 
-    print("foooooooooooooooooooo")
-    print("api key: ", GEMINI_API_KEY)
-    print("foooooooooooooooooooo")
+# Thread pool for blocking IO
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
+# Timeout for Gemini API call (seconds)
+GEMINI_TIMEOUT = int(os.getenv('GEMINI_TIMEOUT', '30'))
+
+def _analyze_image_sync(img: Image.Image, dict_of_vars: dict):
     model = genai.GenerativeModel(model_name="gemini-1.5-flash")
     dict_of_vars_str = json.dumps(dict_of_vars, ensure_ascii=False)
     prompt = (
@@ -62,18 +69,24 @@ def analyze_image(img: Image.Image, dict_of_vars: dict):
         f"DO NOT USE BACKTICKS OR MARKDOWN FORMATTING. "
         f"PROPERLY QUOTE THE KEYS AND VALUES IN THE DICTIONARY FOR EASIER PARSING WITH Python's ast.literal_eval."
     )
-
-    response = model.generate_content([prompt, img])
-    print(response.text)
-    answers = []
     try:
+        response = model.generate_content([prompt, img])
+        logger.info(f"Gemini API response: {response.text}")
         answers = ast.literal_eval(response.text)
+        for answer in answers:
+            answer['assign'] = bool(answer.get('assign', False))
+        return answers
     except Exception as e:
-        print(f"Error in parsing response from Gemini API: {e}")
-    print('returned answer ', answers)
-    for answer in answers:
-        if 'assign' in answer:
-            answer['assign'] = True
-        else:
-            answer['assign'] = False
-    return answers
+        logger.error(f"Error in Gemini API or parsing: {e}")
+        return {"error": str(e)}
+
+def analyze_image(img: Image.Image, dict_of_vars: dict):
+    future = _executor.submit(_analyze_image_sync, img, dict_of_vars)
+    try:
+        return future.result(timeout=GEMINI_TIMEOUT)
+    except concurrent.futures.TimeoutError:
+        logger.error("Gemini API call timed out")
+        return {"error": "Gemini API call timed out"}
+    except Exception as e:
+        logger.error(f"Error in analyze_image: {e}")
+        return {"error": str(e)}
